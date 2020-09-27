@@ -202,7 +202,7 @@ connection name
 
 • Select the event hub policy and click create
 
-![]9Images/Images/images:sentimentanalytics:*.png/image--023.png)
+![](Images/Images/images:sentimentanalytics:*.png/image--023.png)
 
 • In the parameter drop-down select content
 
@@ -230,6 +230,8 @@ ingested into your Event Hub.
 
 ![](Images/Images/images:sentimentanalytics:*.png/image--027.png)
 
+![](Images/Images/images:sentimentanalytics:*.png/image--028.png)
+
 ### Repeat the above steps to create another Logic App that ingests tweets that contain *#sad*.
 
 ## Create a web service that performs sentiment analysis
@@ -239,7 +241,198 @@ the sentiment analysis.
 
 • Navigate to the Azure AI Gallery [experiment for sentiment analysis](https://gallery.azure.ai/Experiment/Predictive-Mini-Twitter-sentiment-analysis-Experiment-1).
 
-• Click on Open in studio.
+• Click on *Open in studio*.
+
+![](Images/Images/images:sentimentanalytics:*.png/image--029.png)
+
+• Select and/or create a AML Studio workspace. Click OK if you get a warning
+about upgrading the experiment to a later version.
+
+![](Images/Images/images:sentimentanalytics:*.png/image--030.png)
+
+• Run the experiment, via the command at the bottom of the page, in order to
+train the model. This can take several minutes
+
+![](Images/Images/images:sentimentanalytics:*.png/image--031.png)
+
+• Next, you can click Deploy web service. After a while, you get redirected to the
+overview page of the created web service. Copy already the API key, as you will
+need this later in the lab.
+
+![](Images/Images/images:sentimentanalytics:*.png/image--032.png)
+
+**• Via the *Test* button, you can easily provide a value to be analyzed:**
+
+![](Images/Images/images:sentimentanalytics:*.png/image--033.png)
+
+• At the bottom of the page, the result appears
+
+![](Images/Images/images:sentimentanalytics:*.png/image--034.png)
+
+### • Click now on the *REQUEST/RESPONSE* link, to go to the *API Help Page*, where you need to copy the web service URL for later usage
+
+![](Images/Images/images:sentimentanalytics:*.png/image--035.png)
+
+
+# Process tweets in realtime
+
+## Create an Azure Stream Analytics Job
+
+We need an Azure Stream Analytics Job to process the incoming stream of tweets in
+realtime.
+
+• Go to the resource group you created earlier (you can search the resource group
+in search bar on the portal page)
+
+• Click on +Add
+
+![](Images/Images/images:sentimentanalytics:*.png/image--036.png)
+
+• Search for stream analytics job.
+
+• Click create
+
+![](Images/Images/images:sentimentanalytics:*.png/image--037.png)
+
+• Create a Stream Analytics Job, named *{prefix}-sentiment-analysis-asa*. Select the
+resource group you created and identical location as the previously created
+services. Keep *Cloud* as the hosting environment and set the *Streaming* units to 1.
+The latter will save you some costs.
+
+![](Images/Images/images:sentimentanalytics:*.png/image--038.png)
+
+• Click Create
+
+• Click on Go to resource
+
+## Configure the Event Hubs Input
+
+Let's now create a new *Input*, which should refer to the Event Hub that we created.
+
+• Go to the *Inputs* blade and click *Add stream input*. Choose *Event Hub*
+
+![](Images/Images/images:sentimentanalytics:*.png/image--039.png)
+
+![](Images/Images/images:sentimentanalytics:*.png/image--040.png)
+
+• In case you created the Event Hub yourself, you can use the Select Event Hub from
+your subscription option. If not, provide the settings manually. You can retrieve all
+these settings from the Event Hubs connection string.
+
+![](Images/Images/images:sentimentanalytics:*.png/image--041.png)
+
+• Click Save
+
+## Create AML Web Service function
+
+To be able to connect to the AML web service, we must create a new *Function*.
+
+• Go to the *Funtions* blade and click *Add*. Choose *Azure ML Studio*.
+
+![](Images/Images/images:sentimentanalytics:*.png/image--042.png)
+
+• Provide the function alias *getSentiment*. Provide the settings manually by
+specifying the *Url* and *API Key* that you copied previously.
+
+![](Images/Images/images:sentimentanalytics:*.png/image--043.png)
+
+## Configure the Power BI output
+
+We need to send the result to Power BI, which means creating an *Output*.
+
+• Go to the *Outputs* blade and click *Add*. Choose Power BI.
+
+![](Images/Images/images:sentimentanalytics:*.png/image--044.png)
+
+• Click on Authorize if it prompts you to authenticate
+
+![](Images/Images/images:sentimentanalytics:*.png/image--045.png)
+
+• Provide the output alias *powerbi*. Specify a meaningful *Dataset name* and *Table
+name*. These names will be used to create automatically a data set in Power BI
+
+![](Images/Images/images:sentimentanalytics:*.png/image--046.png)
+
+
+## Configure the query
+
+Now, we must write a query that calls the AML function to get the sentiment score for
+each tweet and aggregates the results per 10 seconds.
+
+• Go to the *Query* blade and paste the following SQL statement in the query
+window.
+
+       --Create a temp table that contains the sentiment score (via the getSentiment
+         function)
+         WITH
+         scoredData AS (
+         SELECT time, hashtag, getSentiment(text) as result
+         FROM twitterfeed
+         )
+       --Select average score over a window of 10 seconds and send it to Power BI
+         SELECT
+              System.TimeStamp as time,
+              hashtag,
+              AVG(result.[Score]) as score
+         INTO
+              powerbi
+         FROM
+              scoredData
+         GROUP BY
+              hashtag, TumblingWindow(second,10) 
+              
+              
+ ![](Images/Images/images:sentimentanalytics:*.png/image--047.png)
+ 
+ • Click *Save*.
+ 
+ ## Start and monitor the job
+ 
+ • Go to the *Overview* blade and start the job from now.
+ 
+ ![](Images/Images/images:sentimentanalytics:*.png/image--048.png)
+ 
+ • Click Start
+ 
+ • It takes a while before the job is completed up and running, but after 5 minutes,
+you should see that the first events are getting processed.
+
+![](Images/Images/images:sentimentanalytics:*.png/image--049.png)
+
+## Visualize results in Power BI
+
+In your Power BI namespace, you should see under the *Datasets* tab, that a data set has
+been automatically created by Azure Stream Analytics.
+
+![](Images/Images/images:sentimentanalytics:*.png/image--050.png)
+
+• In the *Actions* of your data set, choose *Create report*.
+
+![]Images/Images/images:sentimentanalytics:*.png/image--051.png)
+
+• Select the *Line chart* as the chart type. Take time as the *Axis*, *hashtag* as
+the *Legend* and *score* as the *Values*.
+
+![](Images/Images/images:sentimentanalytics:*.png/image--052.png)
+
+• Make the chart itself bigger, so it nicely fits your screen. You should see the
+results by now. Normally, *#happy* should have a significantly better sentiment
+score, compared to *#sad*.
+
+![](Images/Images/images:sentimentanalytics:*.png/image--053.jpg)
+
+• Save the report and give it a meaningful name.
+ 
+ 
+ 
+ 
+
+
+
+
+
+
+
 
 
 
